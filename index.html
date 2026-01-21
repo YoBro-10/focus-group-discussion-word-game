@@ -28,9 +28,9 @@
         };
 
         // Initialize Firebase
-        let app, database;
+        let firebaseApp, database;
         try {
-            app = firebase.initializeApp(firebaseConfig);
+            firebaseApp = firebase.initializeApp(firebaseConfig);
             database = firebase.database();
             console.log("Firebase initialized successfully!");
         } catch (error) {
@@ -80,7 +80,7 @@
                 this.draggedWord = null;
                 this.draggedFrom = null;
                 this.loading = true;
-                
+                this.render();
                 this.init();
             }
 
@@ -323,4 +323,5 @@
         });
     </script>
 </body>
+
 </html>
