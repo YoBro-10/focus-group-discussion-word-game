@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Focus Group Discussion</title>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        
+        // Lucide React icons as inline SVG components
+        const GripVertical = ({ className }) => (
+            <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/>
+            </svg>
+        );
+        
+        const RefreshCw = ({ className }) => (
+            <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>
+            </svg>
+        );
+        
+        const Users = ({ className }) => (
+            <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+        );
+
+        function FocusGroupDiscussion() {
+            const initialWords = [
+                'Trust', 'Teamwork', 'Employee involvement', 'Loyalty',
+                'Commitment', 'Collaboration', 'Mutual respect', 'Empowerment',
+                'People development', 'Open communication', 'Listening', 'Supporting',
+                'Coaching', 'Caring', 'Collaborating', 'Feedback',
+                'Resolving', 'Celebrating', 'Sharing', 'Facilitating',
+                'Innovation', 'Agility', 'Creativity', 'Experimentation',
+                'Growth', 'Adaptability', 'Entrepreneurial thinking', 'Vision',
+                'Continuous-Learning', 'Challenging', 'Experimenting', 'Risk-taking',
+                'Learning', 'Flexing', 'Deciding', 'Innovating',
+                'Developing', 'Envisioning', 'Adapting', 'Stability',
+                'Consistency', 'Order', 'Efficiency', 'Predictability',
+                'Accountability', 'Discipline', 'Compliance', 'Formal authority',
+                'Standardization', 'Structuring', 'Complying', 'Defining',
+                'Monitoring', 'Approving', 'Documenting', 'Controlling',
+                'Minimizing', 'Scheduling', 'Standardizing', 'Results orientation',
+                'Competitiveness', 'Achievement', 'Accountability for outcomes', 'Customer focus',
+                'Productivity', 'Profitability', 'Speed', 'Goal clarity',
+                'Performance excellence', 'Targeting', 'Tracking', 'Rewarding',
+                'Correcting', 'Focusing', 'Stretching', 'Benchmarking',
+                'Prioritizing', 'Urgency'
+            ];
+
+            const baskets = [
+                { id: 'basket1', name: 'Collaborate', color: 'bg-blue-100 border-blue-300' },
+                { id: 'basket2', name: 'Clan', color: 'bg-green-100 border-green-300' },
+                { id: 'basket3', name: 'Compete', color: 'bg-yellow-100 border-yellow-300' },
+                { id: 'basket4', name: 'Control', color: 'bg-purple-100 border-purple-300' }
+            ];
+
+            const [userId] = useState(() => {
+                let id = localStorage.getItem('focus-group-user-id');
+                if (!id) {
+                    id = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                    localStorage.setItem('focus-group-user-id', id);
+                }
+                return id;
+            });
+
+            const [myAvailableWords, setMyAvailableWords] = useState(() => {
+                const saved = localStorage.getItem('my-words-list');
+                return saved ? JSON.parse(saved) : initialWords;
+            });
+
+            const [sharedBaskets, setSharedBaskets] = useState({
+                basket1: [], basket2: [], basket3: [], basket4: []
+            });
+
+            const [draggedWord, setDraggedWord] = useState(null);
+            const [draggedFrom, setDraggedFrom] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+
+            useEffect(() => {
+                localStorage.setItem('my-words-list', JSON.stringify(myAvailableWords));
+            }, [myAvailableWords]);
+
+            useEffect(() => {
+                loadSharedBaskets();
+                const interval = setInterval(() => {
+                    if (document.visibilityState === 'visible') {
+                        loadSharedBaskets();
+                    }
+                }, 2000);
+
+                const handleVisibilityChange = () => {
+                    if (document.visibilityState === 'visible') {
+                        loadSharedBaskets();
+                    }
+                };
+
+                document.addEventListener('visibilitychange', handleVisibilityChange);
+
+                return () => {
+                    clearInterval(interval);
+                    document.removeEventListener('visibilitychange', handleVisibilityChange);
+                };
+            }, []);
+
+            const loadSharedBaskets = async () => {
+                try {
+                    const saved = localStorage.getItem('shared-baskets-data');
+                    if (saved) {
+                        const baskets = JSON.parse(saved);
+                        const currentString = JSON.stringify(sharedBaskets);
+                        const newString = JSON.stringify(baskets);
+                        if (currentString !== newString) {
+                            setSharedBaskets(baskets);
+                        }
+                    }
+                    setLoading(false);
+                } catch (err) {
+                    setLoading(false);
+                }
+            };
+
+            const saveSharedBaskets = async (baskets) => {
+                try {
+                    localStorage.setItem('shared-baskets-data', JSON.stringify(baskets));
+                    window.dispatchEvent(new Event('storage'));
+                } catch (err) {
+                    setError('Failed to save. Please try again.');
+                    setTimeout(() => setError(null), 3000);
+                }
+            };
+
+            useEffect(() => {
+                const handleStorageChange = () => {
+                    loadSharedBaskets();
+                };
+                window.addEventListener('storage', handleStorageChange);
+                return () => window.removeEventListener('storage', handleStorageChange);
+            }, []);
+
+            const handleDragStart = (word, source) => {
+                setDraggedWord(word);
+                setDraggedFrom(source);
+            };
+
+            const handleDragOver = (e) => {
+                e.preventDefault();
+            };
+
+            const handleDrop = async (targetBasket) => {
+                if (!draggedWord) return;
+
+                let newMyWords = [...myAvailableWords];
+                let newBaskets = { ...sharedBaskets };
+
+                if (draggedFrom === 'available') {
+                    newMyWords = myAvailableWords.filter(w => w !== draggedWord);
+
+                    if (targetBasket === 'available') {
+                        setDraggedWord(null);
+                        setDraggedFrom(null);
+                        return;
+                    } else {
+                        newBaskets[targetBasket] = [...newBaskets[targetBasket], { word: draggedWord, userId }];
+                    }
+                } else {
+                    const sourceBasket = draggedFrom;
+                    const myContributionIndex = newBaskets[sourceBasket].findIndex(
+                        item => item.word === draggedWord && item.userId === userId
+                    );
+
+                    if (myContributionIndex === -1) {
+                        setError("You can only move words you've added!");
+                        setTimeout(() => setError(null), 3000);
+                        setDraggedWord(null);
+                        setDraggedFrom(null);
+                        return;
+                    }
+
+                    newBaskets[sourceBasket] = newBaskets[sourceBasket].filter((item, idx) => idx !== myContributionIndex);
+
+                    if (targetBasket === 'available') {
+                        newMyWords = [...myAvailableWords, draggedWord];
+                    } else {
+                        newBaskets[targetBasket] = [...newBaskets[targetBasket], { word: draggedWord, userId }];
+                    }
+                }
+
+                setMyAvailableWords(newMyWords);
+                setSharedBaskets(newBaskets);
+                await saveSharedBaskets(newBaskets);
+
+                setDraggedWord(null);
+                setDraggedFrom(null);
+            };
+
+            const handleTouchStart = (word, source) => {
+                setDraggedWord(word);
+                setDraggedFrom(source);
+            };
+
+            const handleTouchEnd = (e, targetBasket) => {
+                if (!draggedWord) return;
+                handleDrop(targetBasket);
+            };
+
+            const resetMyWords = () => {
+                setMyAvailableWords(initialWords);
+                localStorage.setItem('my-words-list', JSON.stringify(initialWords));
+            };
+
+            const resetAllBaskets = async () => {
+                const emptyBaskets = {
+                    basket1: [], basket2: [], basket3: [], basket4: []
+                };
+                setSharedBaskets(emptyBaskets);
+                await saveSharedBaskets(emptyBaskets);
+            };
+
+            const getBasketDisplay = (basketItems) => {
+                const wordGroups = {};
+
+                basketItems.forEach(item => {
+                    if (!wordGroups[item.word]) {
+                        wordGroups[item.word] = { total: 0, myCount: 0, userIds: [] };
+                    }
+                    wordGroups[item.word].total++;
+                    wordGroups[item.word].userIds.push(item.userId);
+                    if (item.userId === userId) {
+                        wordGroups[item.word].myCount++;
+                    }
+                });
+
+                return Object.entries(wordGroups).map(([word, data]) => ({
+                    word,
+                    count: data.total,
+                    isMine: data.myCount > 0,
+                    myCount: data.myCount,
+                    display: data.total > 1 ? `${word} (${data.total})` : word
+                }));
+            };
+
+            const WordCard = ({ word, source, onTouchStart }) => {
+                const handleDragStartCard = (e) => {
+                    e.stopPropagation();
+                    handleDragStart(word, source);
+                };
+
+                const handleTouchStartCard = (e) => {
+                    e.stopPropagation();
+                    onTouchStart(word, source);
+                };
+
+                return (
+                    <div
+                        draggable
+                        onDragStart={handleDragStartCard}
+                        onTouchStart={handleTouchStartCard}
+                        className="bg-white border-2 border-gray-300 rounded-lg p-2 cursor-move shadow-sm hover:shadow-md transition-shadow flex flex-col items-center justify-center gap-1 touch-none text-xs min-h-16"
+                    >
+                        <GripVertical className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                        <span className="font-medium text-gray-800 text-center leading-tight break-words w-full pointer-events-none">{word}</span>
+                    </div>
+                );
+            };
+
+            const BasketWordCard = ({ word, display, count, isMine, source, onTouchStart }) => {
+                const handleDragStartCard = (e) => {
+                    e.stopPropagation();
+                    handleDragStart(word, source);
+                };
+
+                const handleTouchStartCard = (e) => {
+                    e.stopPropagation();
+                    onTouchStart(word, source);
+                };
+
+                return (
+                    <div
+                        draggable={isMine}
+                        onDragStart={isMine ? handleDragStartCard : undefined}
+                        onTouchStart={isMine ? handleTouchStartCard : undefined}
+                        className={`${isMine ? 'bg-white border-green-400 cursor-move' : 'bg-gray-50 border-gray-300 cursor-not-allowed'} border-2 rounded-lg p-2 shadow-sm ${isMine ? 'hover:shadow-md' : ''} transition-shadow flex flex-col items-center justify-center text-xs min-h-16`}
+                    >
+                        {isMine && <GripVertical className="w-3 h-3 text-green-500 flex-shrink-0" />}
+                        <span className={`font-medium ${isMine ? 'text-gray-800' : 'text-gray-500'} text-center leading-tight break-words w-full pointer-events-none`}>
+                            {display}
+                        </span>
+                        {count > 1 && (
+                            <span className="text-xs text-gray-500 mt-1">
+                                <Users className="w-3 h-3 inline mr-1" />
+                                {count} people
+                            </span>
+                        )}
+                        {isMine && (
+                            <span className="text-xs text-green-600 font-semibold mt-1">
+                                ✓ Yours
+                            </span>
+                        )}
+                    </div>
+                );
+            };
+
+            if (loading) {
+                return (
+                    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 flex items-center justify-center">
+                        <div className="text-center">
+                            <RefreshCw className="w-12 h-12 text-indigo-600 animate-spin mx-auto mb-4" />
+                            <p className="text-gray-600">Loading shared board...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 p-4">
+                    <div className="max-w-6xl mx-auto">
+                        <div className="text-center mb-6">
+                            <h1 className="text-3xl font-bold text-gray-800 mb-2">Focus Group Discussion</h1>
+                            <p className="text-gray-600">🌐 Your words are private • Baskets are shared with everyone</p>
+                            {error && (
+                                <div className="mt-2 text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">
+                                    {error}
+                                </div>
+                            )}
+                            <div className="mt-3 flex gap-2 justify-center flex-wrap">
+                                <button
+                                    onClick={resetMyWords}
+                                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                                >
+                                    Reset My Words
+                                </button>
+                                <button
+                                    onClick={resetAllBaskets}
+                                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
+                                >
+                                    Clear All Baskets (Everyone)
+                                </button>
+                            </div>
+                        </div>
+
+                        <div
+                            onDragOver={handleDragOver}
+                            onDrop={() => handleDrop('available')}
+                            onTouchEnd={(e) => handleTouchEnd(e, 'available')}
+                            className="bg-white rounded-xl shadow-lg p-4 mb-6 border-2 border-dashed border-gray-300 min-h-32"
+                        >
+                            <h2 className="text-lg font-semibold text-gray-700 mb-3">
+                                My Available Words
+                                <span className="text-sm font-normal text-gray-500 ml-2">(Only you see this - Drop here to remove from baskets)</span>
+                            </h2>
+                            <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
+                                {myAvailableWords.map((word, index) => (
+                                    <WordCard
+                                        key={`available-${word}-${index}`}
+                                        word={word}
+                                        source="available"
+                                        onTouchStart={handleTouchStart}
+                                    />
+                                ))}
+                            </div>
+                            {myAvailableWords.length === 0 && (
+                                <p className="text-gray-400 text-center py-8">You've sorted all your words!</p>
+                            )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {baskets.map((basket) => {
+                                const displayItems = getBasketDisplay(sharedBaskets[basket.id]);
+                                const uniqueCount = displayItems.length;
+
+                                return (
+                                    <div
+                                        key={basket.id}
+                                        onDragOver={handleDragOver}
+                                        onDrop={() => handleDrop(basket.id)}
+                                        onTouchEnd={(e) => handleTouchEnd(e, basket.id)}
+                                        className={`${basket.color} rounded-xl shadow-lg p-4 border-2 border-dashed min-h-48`}
+                                    >
+                                        <h3 className="text-lg font-semibold text-gray-800 mb-3">
+                                            {basket.name}
+                                            <span className="ml-2 text-sm font-normal text-gray-600">
+                                                ({uniqueCount} total)
+                                            </span>
+                                        </h3>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                            {displayItems.map((item, index) => (
+                                                <BasketWordCard
+                                                    key={`${basket.id}-${item.word}-${index}`}
+                                                    word={item.word}
+                                                    display={item.display}
+                                                    count={item.count}
+                                                    isMine={item.isMine}
+                                                    source={basket.id}
+                                                    onTouchStart={handleTouchStart}
+                                                />
+                                            ))}
+                                        </div>
+                                        {displayItems.length === 0 && (
+                                            <p className="text-gray-400 text-center py-8">Drop words here</p>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <div className="mt-6 text-center text-sm text-gray-500">
+                            <p>💡 Words with a green border and "✓ Yours" can be dragged to move or remove them</p>
+                            <p className="mt-1">Gray words were added by others and cannot be moved</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<FocusGroupDiscussion />, document.getElementById('root'));
+    </script>
+</body>
+</html>
