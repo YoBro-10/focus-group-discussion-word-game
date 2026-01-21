@@ -198,7 +198,18 @@
             }
 
             resetMyWords() {
-                this.myAvailableWords = [...initialWords];
+                // Get all words that I've added to baskets
+                const myUsedWords = new Set();
+                Object.values(this.sharedBaskets).forEach(basket => {
+                    (basket || []).forEach(item => {
+                        if (item.userId === this.userId) {
+                            myUsedWords.add(item.word);
+                        }
+                    });
+                });
+                
+                // Reset to initial words minus the ones I've already used
+                this.myAvailableWords = initialWords.filter(word => !myUsedWords.has(word));
                 this.saveMyWords();
                 this.render();
             }
