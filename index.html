@@ -28,14 +28,21 @@
         };
 
         // Initialize Firebase
-        let firebaseApp, database;
+        let database;
         try {
-            firebaseApp = firebase.initializeApp(firebaseConfig);
+            firebase.initializeApp(firebaseConfig);
             database = firebase.database();
             console.log("Firebase initialized successfully!");
         } catch (error) {
             console.error("Firebase initialization error:", error);
-            alert("Firebase configuration error. Please check your config values.");
+            document.getElementById('root').innerHTML = `
+                <div class="min-h-screen bg-red-50 flex items-center justify-center p-4">
+                    <div class="bg-white p-6 rounded-lg shadow-lg max-w-md">
+                        <h2 class="text-xl font-bold text-red-600 mb-2">Configuration Error</h2>
+                        <p class="text-gray-700">${error.message}</p>
+                    </div>
+                </div>
+            `;
         }
 
         // ============================================
@@ -72,6 +79,9 @@
             { id: 'basket4', name: 'Control', color: 'bg-purple-100 border-purple-300' }
         ];
 
+        // Global app variable
+        let app = null;
+
         class FocusGroupApp {
             constructor() {
                 this.userId = this.getUserId();
@@ -80,6 +90,8 @@
                 this.draggedWord = null;
                 this.draggedFrom = null;
                 this.loading = true;
+                this.errorMessage = null;
+                
                 this.render();
                 this.init();
             }
@@ -90,12 +102,13 @@
                     id = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                     localStorage.setItem('focus-group-user-id', id);
                 }
+                console.log('User ID:', id);
                 return id;
             }
 
             loadMyWords() {
                 const saved = localStorage.getItem('my-words-list');
-                return saved ? JSON.parse(saved) : initialWords;
+                return saved ? JSON.parse(saved) : [...initialWords];
             }
 
             saveMyWords() {
@@ -103,36 +116,53 @@
             }
 
             async init() {
-                // Listen to Firebase changes
-                database.ref('baskets').on('value', (snapshot) => {
-                    const data = snapshot.val();
-                    if (data) {
-                        this.sharedBaskets = data;
-                    }
+                try {
+                    // Listen to Firebase changes
+                    database.ref('baskets').on('value', (snapshot) => {
+                        const data = snapshot.val();
+                        console.log('Firebase data received:', data);
+                        if (data) {
+                            this.sharedBaskets = data;
+                        }
+                        this.loading = false;
+                        this.render();
+                    }, (error) => {
+                        console.error('Firebase read error:', error);
+                        this.errorMessage = 'Error connecting to database: ' + error.message;
+                        this.loading = false;
+                        this.render();
+                    });
+                } catch (error) {
+                    console.error('Init error:', error);
+                    this.errorMessage = error.message;
                     this.loading = false;
                     this.render();
-                });
+                }
             }
 
             async saveBaskets() {
                 try {
                     await database.ref('baskets').set(this.sharedBaskets);
+                    console.log('Baskets saved successfully');
                 } catch (error) {
-                    this.showError('Failed to save. Please try again.');
+                    console.error('Save error:', error);
+                    this.showError('Failed to save: ' + error.message);
                 }
             }
 
             handleDrop(targetBasket) {
+                console.log('Drop:', this.draggedWord, 'to', targetBasket);
                 if (!this.draggedWord) return;
 
                 let newMyWords = [...this.myAvailableWords];
-                let newBaskets = { ...this.sharedBaskets };
+                let newBaskets = JSON.parse(JSON.stringify(this.sharedBaskets));
 
                 if (this.draggedFrom === 'available') {
                     newMyWords = this.myAvailableWords.filter(w => w !== this.draggedWord);
                     
                     if (targetBasket !== 'available') {
-                        newBaskets[targetBasket] = [...(newBaskets[targetBasket] || []), { word: this.draggedWord, userId: this.userId }];
+                        if (!newBaskets[targetBasket]) newBaskets[targetBasket] = [];
+                        newBaskets[targetBasket].push({ word: this.draggedWord, userId: this.userId });
                     }
                 } else {
                     const sourceBasket = this.draggedFrom;
@@ -147,12 +177,13 @@
                         return;
                     }
 
-                    newBaskets[sourceBasket] = newBaskets[sourceBasket].filter((item, idx) => idx !== myContributionIndex);
+                    newBaskets[sourceBasket].splice(myContributionIndex, 1);
 
                     if (targetBasket === 'available') {
-                        newMyWords = [...this.myAvailableWords, this.draggedWord];
+                        newMyWords.push(this.draggedWord);
                     } else {
-                        newBaskets[targetBasket] = [...(newBaskets[targetBasket] || []), { word: this.draggedWord, userId: this.userId }];
+                        if (!newBaskets[targetBasket]) newBaskets[targetBasket] = [];
+                        newBaskets[targetBasket].push({ word: this.draggedWord, userId: this.userId });
                     }
                 }
 
@@ -173,9 +204,9 @@
             }
 
             async resetAllBaskets() {
+                if (!confirm('This will clear all baskets for everyone. Are you sure?')) return;
                 this.sharedBaskets = { basket1: [], basket2: [], basket3: [], basket4: [] };
                 await this.saveBaskets();
-                this.render();
             }
 
             getBasketDisplay(basketItems) {
@@ -200,12 +231,18 @@
             }
 
             showError(message) {
-                const errorDiv = document.getElementById('error-message');
-                if (errorDiv) {
-                    errorDiv.textContent = message;
-                    errorDiv.classList.remove('hidden');
-                    setTimeout(() => errorDiv.classList.add('hidden'), 3000);
-                }
+                this.errorMessage = message;
+                this.render();
+                setTimeout(() => {
+                    this.errorMessage = null;
+                    this.render();
+                }, 3000);
+            }
+
+            escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
             }
 
             render() {
@@ -229,13 +266,17 @@
                             <div class="text-center mb-6">
                                 <h1 class="text-3xl font-bold text-gray-800 mb-2">Focus Group Discussion</h1>
                                 <p class="text-gray-600">🌐 Your words are private • Baskets are shared with everyone in real-time</p>
-                                <div id="error-message" class="hidden mt-2 text-red-600 bg-red-50 border border-red-200 rounded-lg p-2"></div>
+                                ${this.errorMessage ? `
+                                    <div class="mt-2 text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">
+                                        ${this.escapeHtml(this.errorMessage)}
+                                    </div>
+                                ` : ''}
                                 <div class="mt-3 flex gap-2 justify-center flex-wrap">
                                     <button onclick="app.resetMyWords()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm">
                                         Reset My Words
                                     </button>
                                     <button onclick="app.resetAllBaskets()" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm">
-                                        Clear All Baskets (Everyone)
+                                        Clear All Baskets
                                     </button>
                                 </div>
                             </div>
@@ -249,18 +290,20 @@
                                     <span class="text-sm font-normal text-gray-500 ml-2">(Only you see this)</span>
                                 </h2>
                                 <div class="grid grid-cols-4 md:grid-cols-8 gap-2">
-                                    ${this.myAvailableWords.map((word, index) => `
+                                    ${this.myAvailableWords.map((word) => {
+                                        const escaped = this.escapeHtml(word);
+                                        return `
                                         <div 
                                             draggable="true" 
-                                            ondragstart="app.draggedWord='${word}'; app.draggedFrom='available'"
+                                            ondragstart="app.draggedWord='${escaped}'; app.draggedFrom='available'"
                                             class="bg-white border-2 border-gray-300 rounded-lg p-2 cursor-move shadow-sm hover:shadow-md transition-shadow flex flex-col items-center justify-center gap-1 text-xs min-h-16">
                                             <svg class="w-3 h-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                 <circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/>
                                                 <circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/>
                                             </svg>
-                                            <span class="font-medium text-gray-800 text-center leading-tight break-words w-full">${word}</span>
+                                            <span class="font-medium text-gray-800 text-center leading-tight break-words w-full">${escaped}</span>
                                         </div>
-                                    `).join('')}
+                                    `}).join('')}
                                 </div>
                                 ${this.myAvailableWords.length === 0 ? '<p class="text-gray-400 text-center py-8">You\'ve sorted all your words!</p>' : ''}
                             </div>
@@ -278,13 +321,16 @@
                                                 <span class="ml-2 text-sm font-normal text-gray-600">(${displayItems.length} total)</span>
                                             </h3>
                                             <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                                ${displayItems.map(item => `
+                                                ${displayItems.map(item => {
+                                                    const escaped = this.escapeHtml(item.word);
+                                                    const displayEscaped = this.escapeHtml(item.display);
+                                                    return `
                                                     <div 
-                                                        ${item.isMine ? `draggable="true" ondragstart="app.draggedWord='${item.word}'; app.draggedFrom='${basket.id}'"` : ''}
+                                                        ${item.isMine ? `draggable="true" ondragstart="app.draggedWord='${escaped}'; app.draggedFrom='${basket.id}'"` : ''}
                                                         class="${item.isMine ? 'bg-white border-green-400 cursor-move' : 'bg-gray-50 border-gray-300 cursor-not-allowed'} border-2 rounded-lg p-2 shadow-sm transition-shadow flex flex-col items-center justify-center text-xs min-h-16">
                                                         ${item.isMine ? '<svg class="w-3 h-3 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>' : ''}
                                                         <span class="font-medium ${item.isMine ? 'text-gray-800' : 'text-gray-500'} text-center leading-tight break-words w-full">
-                                                            ${item.display}
+                                                            ${displayEscaped}
                                                         </span>
                                                         ${item.count > 1 ? `
                                                             <span class="text-xs text-gray-500 mt-1">
@@ -297,7 +343,7 @@
                                                         ` : ''}
                                                         ${item.isMine ? '<span class="text-xs text-green-600 font-semibold mt-1">✓ Yours</span>' : ''}
                                                     </div>
-                                                `).join('')}
+                                                `}).join('')}
                                             </div>
                                             ${displayItems.length === 0 ? '<p class="text-gray-400 text-center py-8">Drop words here</p>' : ''}
                                         </div>
@@ -317,11 +363,10 @@
         }
 
         // Initialize app when page loads
-        let app;
         window.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded, initializing app...');
             app = new FocusGroupApp();
         });
     </script>
 </body>
-
 </html>
