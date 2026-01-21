@@ -108,7 +108,11 @@
 
             loadMyWords() {
                 const saved = localStorage.getItem('my-words-list');
-                return saved ? JSON.parse(saved) : [...initialWords];
+                if (saved) {
+                    return JSON.parse(saved);
+                }
+                // First time - return all initial words
+                return [...initialWords];
             }
 
             saveMyWords() {
@@ -208,8 +212,13 @@
                     });
                 });
                 
+                console.log('My used words:', Array.from(myUsedWords));
+                
                 // Reset to initial words minus the ones I've already used
-                this.myAvailableWords = initialWords.filter(word => !myUsedWords.has(word));
+                const newWords = initialWords.filter(word => !myUsedWords.has(word));
+                console.log('New available words count:', newWords.length);
+                
+                this.myAvailableWords = newWords;
                 this.saveMyWords();
                 this.render();
             }
